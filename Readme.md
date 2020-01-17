@@ -326,7 +326,7 @@ AOP原理：【看给容器中注册了什么组件，这个组件什么时候�
  */
 ~~~
 
-proceed方法的过程
+proceed方法的过程（图片）
 
-![1579231689471](src\main\resources\img\1579231689471.png)
+<https://github.com/g908682550/spring-study/blob/master/src/main/resources/img/1579231689471.png>
 
