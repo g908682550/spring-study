@@ -22,7 +22,7 @@ import org.springframework.context.annotation.*;
  *          2、要获取到bean本身，需要给id前面加个&标识
  */
 @Configuration
-@Import({Color.class, MyImportSelector.class, MyImportBeanRegistrar.class,MyImportBeanRegistrar.class})
+@Import({Color.class, MyImportSelector.class, MyImportBeanRegistrar.class})
 public class MainConfig2 {
 
     //默认是单例的
