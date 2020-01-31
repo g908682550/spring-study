@@ -6,13 +6,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class Boss {
 
-    private Car car;
-
     @Autowired
-    public Boss(Car car) {
-        this.car = car;
-        System.out.println("boss的有参构造器");
-    }
+    Blue blue;
+
+    Car car;
 
     @Override
     public String toString() {

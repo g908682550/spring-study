@@ -706,3 +706,206 @@ getBean(beanName);ioc.getBean;
 ​		ApplicationEventMulticaster：事件派发：
 
 ​											
+
+## Web
+
+### servlet3.0
+
+#### Shared libraries（共享库）/runtimes pluggability（运行时插件能力）
+
+1、Servlet容器启动会扫描，当前应用里面每一个jar包的ServletContainerInitializer的实现
+
+2、提供ServletContainerInitializer的实现类，必须绑定在
+
+META-INF/services/javax.servlet.ServletContainerInitializer
+
+​	文件的内容就是ServletContainerInitializer实现类的全类名
+
+总结：容器在启动应用的时候，会扫描当前应用每一个jar包里面
+
+META-INF/services/javax.servlet.ServletContainerInitializer
+
+指定的实现类。启动并运行这个实现类的方法,可以传入感兴趣的类型
+
+```java
+//容器启动的时候会将@HandlesTypes指定的这个类型下面的子类（实现类，子接口）传递过来给Set<Class<?>>参数
+@HandlesTypes(WebApplicationInitializer.class)
+public class MyServletContainerInitializer implements ServletContainerInitializer {
+
+    /**
+     * 应用启动的时候，会运行onStartup方法
+     * ServletContext　代表当前web应用的ServletContext，一个Web应用对应一个
+     * Set<Class<?>> 感兴趣类型的所有子类型
+     *      可使用ServletContext注册Web组件（Servlet、Filter、Listener）
+     *      使用编码的方式，再项目启动的时候给ServletContext里面添加组件
+     *          必须在项目启动的时候添加
+     *          1）ServletContainerInitializer得到的ServletContext
+     *          2）ServletContextListener得到的ServletContext
+     */
+    @Override
+    public void onStartup(Set<Class<?>> args0, ServletContext sc){
+
+    }
+}
+```
+
+#### 异步请求
+
+在Servlet3.0之前，是由一个线程来接受请求，并进行业务处理再返回的。
+
+![1580434579861](Readme.assets/1580434579861.png)
+
+### SpringMVC与servlet3.0
+
+#### 注解配置
+
+1、web容器启动的时候，会扫描每个jar包下的META-INF/services/javax.servlet.ServletContainerInitializer
+
+2、加载这个文件指定的SpringServletContainerInitializer
+
+3、spring的应用一启动会加载感兴趣的WebApplicationInitializer接口下的所有组件
+
+4、并且为WebApplicationInitializer组件创建对象（组件不是接口和抽象类）
+
+​			1、AbstractContextLoaderInitializer；创建根容器createRootApplicationContext();
+
+​			2、AbstractDispatcherServletInitializer：
+
+​						创建一个web的ioc容器createServletApplicationContext();
+
+​						创建一个DispatcherServlet：createDispatcherServlet(servletAppContext);
+
+​						将创建的DispatcherServlet添加到ServletContext中：
+
+​													servletContext.addServlet(servletName, dispatcherServlet);
+
+​			3、AbstractAnnotationConfigDispatcherServletInitializer：注解方式配置的DispatcherServlet初始化器
+
+​						创建根容器createRootApplicationContext()；
+
+​											getRootConfigClasses();传入一个配置类
+
+​						创建web的ioc容器：createServletApplicationContext()；
+
+​											getServletConfigClasses();获取配置类
+
+总结：以注解方式来启动SpringMVC，继承AbstractAnnotationConfigDispatcherServletInitializer，实现抽象方法指定DispatcherServlet的配置信息 
+
+```java
+@HandlesTypes(WebApplicationInitializer.class)
+public class SpringServletContainerInitializer implements ServletContainerInitializer {
+    @Override
+	public void onStartup(@Nullable Set<Class<?>> webAppInitializerClasses, ServletContext servletContext)
+			throws ServletException {
+
+		List<WebApplicationInitializer> initializers = new LinkedList<>();
+
+		if (webAppInitializerClasses != null) {
+			for (Class<?> waiClass : webAppInitializerClasses) {
+				// Be defensive: Some servlet containers provide us with invalid classes,
+				// no matter what @HandlesTypes says...
+				if (!waiClass.isInterface() && !Modifier.isAbstract(waiClass.getModifiers()) &&
+						WebApplicationInitializer.class.isAssignableFrom(waiClass)) {
+					try {
+						initializers.add((WebApplicationInitializer)
+								ReflectionUtils.accessibleConstructor(waiClass).newInstance());
+					}
+					catch (Throwable ex) {
+						throw new ServletException("Failed to instantiate WebApplicationInitializer class", ex);
+					}
+				}
+			}
+		}
+
+		if (initializers.isEmpty()) {
+			servletContext.log("No Spring WebApplicationInitializer types detected on classpath");
+			return;
+		}
+
+		servletContext.log(initializers.size() + " Spring WebApplicationInitializers detected on classpath");
+		AnnotationAwareOrderComparator.sort(initializers);
+		for (WebApplicationInitializer initializer : initializers) {
+			initializer.onStartup(servletContext);
+		}
+	}
+```
+
+
+
+```java
+//在web容器启动的时候创建对象，调用方法来初始化容器以及前端控制器
+public class MyWebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+
+    //获取根容器的配置类：（Spring的配置文件）父容器
+    @Override
+    protected Class<?>[] getRootConfigClasses() {
+        return new Class<?>[]{RootConfig.class};
+    }
+
+    //获取web容器的配置类（SpringMVC配置文件）子容器
+    @Override
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class<?>[]{AppConfig.class};
+    }
+
+    //获取DispatcherServlet的映射信息
+    // /:拦截所有请求（包括静态资源，不包括.jsp）
+    @Override
+    protected String[] getServletMappings() {
+        return new String[]{"/"};
+    }
+}
+```
+
+定制SpringMVC：
+
+```java
+@Configuration
+@EnableWebMvc//接管springmvc
+public class WebConfig implements WebMvcConfigurer {
+	配置组件（视图解析器、视图映射、静态资源映射、拦截器）
+    // Implement configuration methods...
+}
+```
+
+#### 异步请求
+
+Callable
+
+```java
+@PostMapping
+public Callable<String> processUpload(final MultipartFile file) {
+
+    return new Callable<String>() {
+        public String call() throws Exception {
+            // ...
+            return "someView";
+        }
+    };
+}
+```
+
+1、SpringMVC异步处理，将Callable提交到TaskExecutor使用一个隔离的线程进行处理
+
+2、DispatcherServlet和所有的Filter退出web容器线程，response仍保持打开状态
+
+3、最终Callable返回一个结果，SpringMVC将请求返回值派发给Servlet容器，进行处理
+
+4、根据Callable返回的结果。SpringMVC继续进行视图渲染流程等
+
+DeferredResult
+
+```java
+@GetMapping("/quotes")
+@ResponseBody
+public DeferredResult<String> quotes() {
+    DeferredResult<String> deferredResult = new DeferredResult<String>();
+    // Save the deferredResult somewhere..
+    return deferredResult;
+}
+
+// From some other thread...
+deferredResult.setResult(result)
+```
+
